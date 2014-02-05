@@ -25,7 +25,8 @@ typedef struct{
   uint8_t linkCode;
   uint8_t reserved;
   uint16_t linkMessageSize;
-  std::list<in6_addr> neighborsAddrList;
+  in6_addr* neighborsAddrList;// array of neighbors (ipv6)
+  int sizeNAL;// size of the array neighborsAddrList
 }helloNeighborList;
 
 /* entete de message hello */
@@ -33,7 +34,8 @@ typedef struct{
   uint16_t reserved1;
   uint8_t hTime;
   uint8_t willingness;
-  std::list<helloNeighborList> neighbors;
+  helloNeighborList* neighbors;// array of the neighbors (1 helloNeighborList by interface)
+  int sizeNL; // size of the array neighbors
 }helloMessageHeader;
 /* link message */
 
@@ -42,5 +44,6 @@ typedef struct{
 typedef struct{
   uint16_t ANSN;
   uint16_t reserved;
-  std::list<in6_addr> advertisedNeighborMainAddress ;
+  in6_addr* advertisedNeighborMainAddress ;// tableau d'IPV6ADDR
+  int sizeANMA;// size of the arrray advertisedNeighborMainAddress
 }tcMessageHeader;
