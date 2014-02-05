@@ -1,9 +1,12 @@
 /* includes généraux */
-#include "message.h"
+#include "Message.h"
 #include <iostream>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <fcntl.h>
+#include <list>
+#include <math.h>
+#include <cstdlib>
 
 /* includes spécifiques pour obtenir l'ip */
 #include <sys/types.h>
@@ -14,6 +17,8 @@
 /* constantes */
 #define SIZE_MAX_UDP 512
 #define C_TIME 0.0625
+#define a 8
+#define b 6
 
 
 using namespace std;
@@ -58,103 +63,113 @@ typedef struct{
   std::list<in6_addr> neighborList;
 }tcMessageHeader;
 
+int envoi_message (void *, char, int);
+int envoi_tc (uint16_t, std::list<in6_addr>);
+int envoi_hello (uint8_t, uint8_t, std::list<in6_addr>);
+in6_addr getMyIp();
 
 /* fonction de construction de TC */
 int envoi_tc (uint16_t ANSN, std::list<in6_addr> neighborList)
 {
-	char type = 2 //TC
+	char type = 2; //TC
 	tcMessageHeader tcH;
 	tcH.ANSN = ANSN;
 	tcH.reserved = 0000000000000000; //toujours cette valeur
-	
+
 	//taille max 512 octets, 1 ip = 16 octets, 31 ip par paquet
 	int nbAdd = 0; //compteur d'adresses
-	std::string res;
-	res += tcH.ANSN; //assignation des champs de tcH
-	res += tcH.reserved;
-	
-	for (std::list<int>::iterator it = neighborList.begin(); it != neighborList.end(); it++)
-	{	
-		if (nbAdd == 31)
+	std::list<in6_addr> small_list_ip; //sous liste d'adresses ip
+
+	std::list<in6_addr>::const_iterator
+        lit (neighborList.begin()),
+        lend(neighborList.end());
+
+	for(;lit!=lend;++lit)
+	{
+		if (nbAdd == 31) //nombre max d'ip atteintes
 		{
-			envoi_message(res); //envoi de res
+			envoi_message(tcH, type, nbAdd*16); //envoi de res
 			nbAdd = 0; //reinitialisation de nbAdd
-			res = tcH.ANSN; //reinitialisation de res
-			res += tcH.reserved;
-		}	
-		res += *it //adresse -> res
-		nbAdd++ //+1 adresse ajoutée
+            small_list_ip.clear();
+		}
+
+		small_list_ip.push_back(*lit); //adresse -> list
+        nbAdd++; //+1 adresse ajoutée
 	}
-	
-	envoi_message(res, type); //envoi du restant
-	
+
+	envoi_message(tcH, type, nbAdd*16); //envoi du restant
+
 	return 0;
 }
 
 /* fonction de construction de hello */
 int envoi_hello (uint8_t hTime, uint8_t willingness, std::list<in6_addr> helloNeighborlist)
 {
-	char type = 1 //Hello
+	char type = 1; //Hello
 	helloMessageHeader helloH;
 	helloH.reserved = 0000000000000000; //toujours cette valeur
 	helloH.hTime = hTime; //définit par le controller
 	helloH.willingness = willingness;
-	
-	std::string res; //resultat à envoyer
-	
-	for (std::list<int>::iterator it = helloNeighborList.begin(); it != helloNeighborList.end(); it++) //iteration sur les parties du message
+
+	std::list<in6_addr>::const_iterator
+        lit_h (helloNeighborlist.begin()),
+        lend_h(helloNeighborlist.end());
+
+	for(;lit_h!=lend_h;++lit_h)
 	{
 		helloNeighborList helloN;
-		helloN.linkCode = *it.linkCode; // inf ou sup à 15 ? -> a resoudre
-		helloN.reserved = *it.reserved;
-		helloN.linkMessageSize = *it.linkMessageSize;
-		
-		res += helloN.linkCode;
-		res += helloN.reserved;
-		res += helloN.linkMessageSize;
-  
-		for (std::list<int>::iterator itN = neighborList.begin(); itN != neighborList.end(); itN++)
+		helloN.linkCode = *lit_h.linkCode; // inf ou sup à 15 ? -> a resoudre
+		helloN.reserved = *lit_h.reserved;
+		helloN.linkMessageSize = *lit_h.linkMessageSize;
+
+		std::list<in6_addr>::const_iterator
+            lit_ip (*lit_h.neighborList.begin()),
+            lend_ip(*lit_h.neighborList.end());
+
+        std::list<in6_addr> list_ip;
+
+		for(;lit_ip!=lend_ip;++lit_ip)
 			{
-				res += *itN; //concatenation des adresses
+				list_ip.push_back(*lit_ip); //concatenation des adresses
 			}
-			
-		envoi_message(res, type); //envoi du message Hello
-		res = "";
+
+		envoi_message(&helloN, type); //envoi du message Hello
+		list_ip.clear();
 	}
-		
+
 	return 0;
 }
 
 /* fonction de construction de message */
-int envoi_message (std::string spe, char type)
+int envoi_message (void * struct_tc_hello, char typen, int sizeAdd)
 {
 	messageHeader message;
-	
+
 	if (type == 2) //TC
 	{
 		message.timeToLive = 255; //valeur constante definie dans la RFC
+		message.size = 4+sizeAdd;
 	}
-	
+
 	else if (type == 1) //Hello
 	{
 		message.timeToLive = 1; //valeur constante definie dans la RFC
+		message.size = 4+
 	}
-	
-	message.size = sizeof(spe);
+
 	message.messageType = type;
-	message.vTime = math.pow(C_TIME*(1+a/16)*2,b); //comprendre la magie de a et b
+	message.vTime = C_TIME*(1+a/16)* pow(2,b); //comprendre la magie de a et b
 	message.originatorAddress = getMyIp(); //fonction à vérifier
 	message.hopCount = 0;
-	message.messageSequenceNumber = ; //numero unique, aucune information pour le traiter
-	
+	message.messageSequenceNumber = 0; //numero unique, aucune information pour le traiter
+    return 0;
 }
 
 /* récupère l'adresse du noeud et la renvoi */
 in6_addr getMyIp()
 {
 	struct ifaddrs *myaddrs, *ifa;
-	void *in_addr;
-	char buf[64];
+	in6_addr *in_addr;
 
 	if(getifaddrs(&myaddrs) != 0) //pas d'adresse ou impossible d'obtenir la liste
 	{
@@ -172,9 +187,10 @@ in6_addr getMyIp()
 		{
 			case AF_INET: //IPv4
 			{
-				struct sockaddr_in *s4 = (struct sockaddr_in *)ifa->ifa_addr;
+				/*struct sockaddr_in *s4 = (struct sockaddr_in *)ifa->ifa_addr;
 				in_addr = &s4->sin_addr;
-				break;
+				break;*/
+				exit(-1);
 			}
 
 			case AF_INET6: //IPv6
@@ -189,5 +205,5 @@ in6_addr getMyIp()
 		}
 	}
 
-	return in_addr;
+	return *in_addr;
 }
