@@ -39,19 +39,20 @@ namespace listener{
 				if (error && error != boost::asio::error::message_size)
 					throw boost::system::system_error(error);
 				  
-				std::cout<<"taille message : "<<len<<"\n"<<recvBuf.data()<<"\n";
+				std::cout << "taille message : " << len << "\n" << recvBuf.data() << "\n";
 			
+				msgBody* mTH;
 				char* temp = recvBuf.data();
 				packetHeader* pH;
 				messageHeader* mH;
 				pH = (packetHeader*)temp;
-				temp+=4;
+				temp += 4;
 				mH = (messageHeader*)temp;
-				temp+=24;
+				temp += 24;
 			
 				if (mH->messageType == HELLO_MESSAGE) {
 					helloMessageHeader* hMH;
-					hMH->reserved1 = (uint16_t)*temp;
+					hMH->reserved = (uint16_t)*temp;
 					temp += 2;
 					hMH->hTime = (uint8_t)*temp;
 					++ temp;
@@ -76,7 +77,10 @@ namespace listener{
 						temp += 16;
 				
 						compt+=hMH->neighbors->linkMessageSize;
+						
+						mTH->bodyHello = hMH;
 					}
+
 				} else if (mH->messageType == TC_MESSAGE) {
 					tcMessageHeader* tMH;
 					tMH->ANSN = (uint16_t)*temp;
@@ -89,7 +93,12 @@ namespace listener{
 					tMH->advertisedNeighborMainAddress = (in6_addr*)temp;
 					tMH->sizeANMA = nb;
 					temp += 16;
+					
+					mTH->bodyTC = tMH;
 				}
+				
+				Message msg(pH, mH, mTH);
+				receptionMsg(msg);
 			}
 		} catch (std::exception& e) {
 			std::cerr << e.what() << std::endl;
