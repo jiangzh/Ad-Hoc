@@ -4,8 +4,6 @@
 
 #include <list>
 
-#ifndef HEADERS.H
-#define HEADERS.H
 /* entete du paquet */
 typedef struct {
   uint16_t packetLength;
@@ -16,7 +14,7 @@ typedef struct {
 typedef struct{
   uint8_t messageType;
   uint8_t vTime;
-  uint16_t messageTime;
+  uint16_t messageSize;
   in6_addr originatorAddress;
   uint8_t timeToLive;
   uint8_t hopCount;
@@ -49,4 +47,3 @@ typedef struct{
   in6_addr* advertisedNeighborMainAddress ;// tableau d'IPV6ADDR
   int sizeANMA;// size of the arrray advertisedNeighborMainAddress
 }tcMessageHeader;
-#endif

@@ -1,0 +1,2 @@
+Création de la structure de la classe.
+Création du socket en construction (problèmes avec Boost asio).
