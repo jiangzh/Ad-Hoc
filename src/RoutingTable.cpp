@@ -1,4 +1,4 @@
-/* ADHOC OLSR PROJECT
+/** ADHOC OLSR PROJECT
  *
  * File : RoutingTable.cpp
  *
@@ -8,62 +8,145 @@
  * Description : This file is concerning the application (and system) routing table management,
  * 				 with all his methods.
  */
+#include "RoutingTable.h"
+#include <string>
+#include <string.h>
+#include <sstream>
+
+RoutingTable::RoutingTable() {
+}
+
+/** METHODS */
+
+void RoutingTable::addRoute(Route *r) {
+	/** systeme call to add a new route r in the kernel IPv6 Routing Table. */
+
+	Route *temp = r;
+	std::ostringstream syscall;
+	syscall << "ip -6 route add " << temp->getIpDest()->toChar() << "/128" <<" via "<<  temp->getNextHop()->toChar()  <<" dev "<< temp->getInterface()->toChar();
+	if(!system((syscall.str()).c_str()))
+		std::cout <<"ERROR SysCall add\n"<<syscall.str()<<std::endl;
+
+}
+
+void RoutingTable::deleteRoute(Route *r) {
+	/** syscall to delete a existing route r in the kernel IPv6 Routing Table. */
+	Route *temp = r;
+	std::ostringstream syscall;
+	syscall << "ip -6 route del " << temp->getIpDest()->toChar()<<"/128" <<" via "<< temp->getNextHop()->toChar() << " dev " << temp->getInterface()->toChar();
+	if(!system((syscall.str()).c_str()))
+		std::cout <<"ERROR SysCall del\n"<<syscall.str()<<std::endl;
+
+}
+
+void RoutingTable::updateRoute(Route *r) {
+	/** to update a route in the Routing Table */
+	Route *temp = r;
+	deleteRoute(temp);
+	addRoute(temp);
+
+}
+
+void RoutingTable::systemTableUpdate(Node *noeud) {
+	//std::cout << tableNeighbor.size() << "test\n";
+	//mRouteList.clear();
+	noeud->lockSystem();
+	//noeud->lockSystem();
+	mRouteList = noeud->getNeighborTable();
+	std::cout << mRouteList.size() << std::endl;
 
 
-#include "Route.h"
+	for (std::list<Route>::iterator it = mRouteList.begin();
+			it != mRouteList.end(); it++) {
+		Route route = *it;
+		switch (it->getAction()) {
+		case ADD: {
+			addRoute(&route);
+			it->setAction(NONE);
+			it--;
+			break;
+		}
+		case DEL: {
+			//std::cout << " deleteVoisin \n";
+			mRouteList.erase(it);
+			it--;
+			deleteRoute(&route);
+			noeud->delNeighbor(route.getIpDest());
 
+			break;
+		}
+		case UPD: {
+			updateRoute(&route);
+			it->setAction(NONE);
+			//std::cout << " updVoisin \n";
+			break;
+		}
 
+		case NONE: {
+			//std::cout << " noneVoisin\n";
+			break;
+		}
 
-	std::list<Route> routeList; // a list containing all the destinations and information about them.
+		default: {
+			std::cout << "Erreur Voisin : Action non définie!" << std::endl;
+			break;
+		}
 
-
-	RoutingTable::RoutingTable(){
-
-		this->routeList = new std::list(); // initializes an empty list to be completed.
-
-	}// end of constructor
-
-	// METHODS
-
-	 void RoutingTable::addRoute(Route r){ // add a new route in the Routing Table of the application.
-
-		 // SYSCALL NETLINK SOCKET, + writing in kernel routing table
-		 std::list<Route>::iterator routeIt =routeList.begin();
-
-		 for(routeIt = Node.begin(); routeIt!= Node.end(); ++routeIt)
-		     {
-			 	 routeList.push_back(r);
-		     }
+		}
 
 	}
 
-	void RoutingTable::deleteRoute(Route r){ // delete an existing route from the Routing Table of the application.
+	noeud->setNeighborTable(mRouteList);
 
+	mRouteList.clear();
+	mRouteList = noeud->getTwoHopNeighborTable();
 
+	/*for (std::list<Route>::iterator it = mRouteList.begin();
+	 it != mRouteList.end(); it++) {
+	 std::cout << "IP  ! " << it->getIpDest()->toChar() << std::endl;
+	 }*/
 
+	for (std::list<Route>::iterator it = mRouteList.begin();
+			it != mRouteList.end(); it++) {
+		Route route = *it;
+		switch (route.getAction()) {
+		case ADD: {
+			//std::cout << "addroute Voisin+2\n";
+			addRoute(&route);
+			it->setAction(NONE);
 
-	}
+			break;
+		}
+		case DEL: {
+			//std::cout << " delete Voisin+2\n";
+			deleteRoute(&route);
+			it = mRouteList.erase(it);
+			noeud->delTwoHopNeighbor(&route);
+			it--;
+			break;
+		}
+		case UPD: {
+			//std::cout << " upd Voisin+2\n";
+			updateRoute(&route);
+			it->setAction(NONE);
+			break;
+		}
 
+		case NONE: {
 
-	void RoutingTable::updateRouteList(){
+			//std::cout << " no Voisin+2\n";
+			break;
+		}
 
+		default: {
+			std::cout << "Erreur Voisin+2: Action non définie!" << std::endl;
+			break;
+		}
 
+		} // end of switch
 
-	} // applies changes after calling systemTableUpdate routine.
-
-
-	void RoutingTable::systemTableUpdate(std::list<Route> routeList){ // updating the system Routing Table after each timer delay.
-
-
-
-	}
-
-
-	std::list<Route> getRouteList(){ // returns the private attribute routeList containing all the routes
-				return routeList;
-			}
-
-
-
-
+	} //end of for
+	noeud->setTwoHopNeighborTable(mRouteList);
+noeud->releaseSystem();
+}
 
