@@ -7,7 +7,7 @@
 #include <list>
 #include <math.h>
 #include <cstdlib>
-#include <headers.h>
+#include "headers.h"
 #include <string.h>
 
 /* includes spécifiques pour obtenir l'ip */
@@ -22,16 +22,22 @@
 #define a 8
 #define b 6
 
+/*variables globales*/
+uint16_t packetSequenceNumber = 0;
+uint16_t messageSequenceNumber = 0;
+
 
 using namespace std;
 
-int envoi_message (void *, char, int);
-int envoi_tc (uint16_t, in6_addr*, int);
-int envoi_hello (uint8_t, uint8_t, helloNeighborList*, int);
-in6_addr getMyIp();
+Message::Message(packetHeader* pH, messageHeader* mH, msgBody* mTH)
+{
+    mPH = pH;
+    mMH = mH;
+    mMTH = mTH;
+}
 
 /* fonction de construction de TC */
-int envoi_tc (uint16_t ANSN, in6_addr* advertisedNeighborMainAddress, int sizeANMA)
+int Message::build_tc (uint16_t ANSN, in6_addr* advertisedNeighborMainAddress, int sizeANMA, in6_addr dest_ip)
 {
 	char type = 2; //TC
 	tcMessageHeader tcH;
@@ -46,7 +52,7 @@ int envoi_tc (uint16_t ANSN, in6_addr* advertisedNeighborMainAddress, int sizeAN
 	{
 		if (nbAdd == 31) //nombre max d'ip atteintes
 		{
-			envoi_message(&tcH, type, nbAdd*16); //envoi de res
+			send_message(&tcH, type, nbAdd*16, dest_ip); //envoi de res
 			nbAdd = 0; //reinitialisation de nbAdd
             memset (small_list_ip, 0, sizeof(small_list_ip));
 		}
@@ -55,13 +61,13 @@ int envoi_tc (uint16_t ANSN, in6_addr* advertisedNeighborMainAddress, int sizeAN
         nbAdd++; //+1 adresse ajoutée
 	}
 
-	envoi_message(&tcH, type, nbAdd*16); //envoi du restant
+	send_message(&tcH, type, nbAdd*16, dest_ip); //envoi du restant
 
 	return 0;
 }
 
 /* fonction de construction de hello */
-int envoi_hello (uint8_t hTime, uint8_t willingness, helloNeighborList* neighbors, int sizeNL)
+int Message::build_hello (uint8_t hTime, uint8_t willingness, helloNeighborList* neighbors, int sizeNL, in6_addr dest_ip)
 {
 	char type = 1; //Hello
 	helloMessageHeader helloH;
@@ -86,7 +92,7 @@ int envoi_hello (uint8_t hTime, uint8_t willingness, helloNeighborList* neighbor
 				nbAdd++;
 			}
 
-		envoi_message(&helloN, type, nbAdd*16); //envoi du message Hello
+		send_message(&helloN, type, nbAdd*16, dest_ip); //envoi du message Hello
 		memset (list_ip, 0, sizeof(list_ip));
 	}
 
@@ -94,34 +100,39 @@ int envoi_hello (uint8_t hTime, uint8_t willingness, helloNeighborList* neighbor
 }
 
 /* fonction de construction de message */
-int envoi_message (void *htc, char type, int sizeAdd)
+int Message::send_message (void *htc, char type, int sizeAdd, in6_addr dest_ip)
 {
 	messageHeader message;
+	packetHeader packet;
 
 	if (type == 2) //TC
 	{
 		message.timeToLive = 255; //valeur constante definie dans la RFC
-		message.size = 4+sizeAdd;
+		message.messageSize = 4+sizeAdd;
 	}
 
 	else if (type == 1) //Hello
 	{
 		message.timeToLive = 1; //valeur constante definie dans la RFC
-		message.size = 8+sizeAdd; //a completer
+		message.messageSize = 8+sizeAdd; //a completer
 	}
 
 	message.messageType = type;
 	message.vTime = C_TIME*(1+a/16)* pow(2,b);
 	message.originatorAddress = getMyIp(); //fonction à vérifier
 	message.hopCount = 0;
-	message.messageSequenceNumber = 0; //numero unique, aucune information pour le traiter
+	message.messageSequenceNumber = messageSequenceNumber++; //numero unique, aucune information pour le traiter
 
-	//appel de la fonction qui gère les socket, voir avec Aminatou
+    packet.packetLength = sizeof(message) + sizeof(&htc);
+    packet.packetSequenceNumber = packetSequenceNumber++;
+
+    /* envoi du paquet sous la forme packetHeader + messageBody + TC/HelloBody + IP de destination */
+    sendPacket(packet, message, htc, dest_ip);
     return 0;
 }
 
 /* récupère l'adresse du noeud et la renvoi */
-in6_addr getMyIp()
+in6_addr Message::getMyIp()
 {
 	struct ifaddrs *myaddrs, *ifa;
 	in6_addr *in_addr;
